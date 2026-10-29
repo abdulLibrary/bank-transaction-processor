@@ -1,0 +1,109 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: bank-transaction-processor
+  datasource:
+    url: jdbc:postgresql://localhost:5433/bankdb
+    username: bank
+    password: bank
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+# Local / demo profile uses H2 so the service can start without PostgreSQL
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+  datasource:
+    url: jdbc:h2:mem:bankdb;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none
+  h2:
+    console:
+      enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+  tracing:
+    sampling:
+      probability: 1.0
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      bankOperations:
+        slidingWindowSize: 20
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 5
+  ratelimiter:
+    instances:
+      bankOperations:
+        limitForPeriod: 50
+        limitRefreshPeriod: 1s
+        timeoutDuration: 0
+
+bank:
+  outbox:
+    poll-interval-ms: 2000
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    com.natwest.bank: INFO
+    org.springframework.web: INFO
+    org.hibernate.SQL: WARN
+    org.springframework.security: INFO
+
+# ---------------------------------------------------------------------------
+# JWT / OAuth2 Resource Server
+# ---------------------------------------------------------------------------
+# This service is a pure Resource Server: it validates JWTs issued by a
+# separate Auth service. It does NOT issue tokens.
+#
+# Local / demo mode uses a shared HS256 secret (see SecurityConfig).
+# Production: set spring.security.oauth2.resourceserver.jwt.issuer-uri
+# (or jwk-set-uri) and remove / override the secret-based JwtDecoder bean.
+app:
+  security:
+    jwt:
+      # Must be at least 256 bits (32+ characters) for HS256
+      secret: "ThisIsADevOnlySecretKeyThatIsAtLeast32BytesLong!!"
+
+# Uncomment for production-style Auth server validation (and remove the
+# secret-based JwtDecoder bean or make it conditional):
+# spring:
+#   security:
+#     oauth2:
+#       resourceserver:
+#         jwt:
+#           issuer-uri: https://auth.example.com
+#           # or: jwk-set-uri: https://auth.example.com/.well-known/jwks.json
