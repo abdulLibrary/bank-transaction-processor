@@ -1,9 +1,9 @@
-package com.natwest.bank.api.mapper;
+package com.natwest.bank.mapper;
 
-import com.natwest.bank.api.dto.AccountResponse;
-import com.natwest.bank.api.dto.TransactionResponse;
 import com.natwest.bank.domain.Account;
 import com.natwest.bank.domain.Transaction;
+import com.natwest.bank.dto.AccountResponse;
+import com.natwest.bank.dto.TransactionResponse;
 import org.springframework.stereotype.Component;
 
 import java.util.List;

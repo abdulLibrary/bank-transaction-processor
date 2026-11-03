@@ -1,4 +1,4 @@
-package com.natwest.bank.api.dto;
+package com.natwest.bank.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;

@@ -1,12 +1,12 @@
-package com.natwest.bank.api;
+package com.natwest.bank.controller;
 
-import com.natwest.bank.api.dto.*;
-import com.natwest.bank.api.mapper.AccountMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.natwest.bank.idempotency.IdempotentExecutor;
+import com.natwest.bank.mapper.AccountMapper;
 import com.natwest.bank.domain.Money;
-import com.natwest.bank.idempotency.IdempotencyRecord;
+import com.natwest.bank.dto.*;
 import com.natwest.bank.idempotency.IdempotencyService;
 import com.natwest.bank.service.BankService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -16,7 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Optional;
+
 
 @RestController
 @RequestMapping("/api/v1/accounts")
@@ -27,15 +27,17 @@ public class BankController {
     private final AccountMapper mapper;
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
+    private final IdempotentExecutor idempotentExecutor;
 
     public BankController(BankService bankService,
                           AccountMapper mapper,
                           IdempotencyService idempotencyService,
-                          ObjectMapper objectMapper) {
+                          ObjectMapper objectMapper, IdempotentExecutor idempotentExecutor) {
         this.bankService = bankService;
         this.mapper = mapper;
         this.idempotencyService = idempotencyService;
         this.objectMapper = objectMapper;
+        this.idempotentExecutor = idempotentExecutor;
     }
 
     @PostMapping
@@ -61,7 +63,7 @@ public class BankController {
     @GetMapping("/{accountId}")
     @Operation(summary = "Get account with full transaction history")
     public AccountResponse getAccount(@PathVariable String accountId) {
-        return bankService.getAccountDetails(accountId);
+        return mapper.toResponse(bankService.getAccount(accountId));
     }
 
 
@@ -76,7 +78,7 @@ public class BankController {
             @Valid @RequestBody MoneyRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
 
-        return executeIdempotent("DEPOSIT", idempotencyKey, request, () -> {
+         return idempotentExecutor.execute("DEPOSIT", idempotencyKey, request, () -> {
             bankService.deposit(accountId, Money.of(request.amount()));
             return ResponseEntity.noContent().build();
         });
@@ -90,7 +92,7 @@ public class BankController {
             @Valid @RequestBody MoneyRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
 
-        return executeIdempotent("WITHDRAWAL", idempotencyKey, request, () -> {
+        return idempotentExecutor.execute("WITHDRAWAL", idempotencyKey, request, () -> {
             bankService.withdraw(accountId, Money.of(request.amount()));
             return ResponseEntity.noContent().build();
         });
@@ -103,7 +105,7 @@ public class BankController {
             @Valid @RequestBody TransferRequest request,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
 
-        return executeIdempotent("TRANSFER", idempotencyKey, request, () -> {
+        return idempotentExecutor.execute("TRANSFER", idempotencyKey, request, () -> {
             bankService.transfer(
                     request.fromAccountId(),
                     request.toAccountId(),
@@ -113,22 +115,5 @@ public class BankController {
         });
     }
 
-    private ResponseEntity<Void> executeIdempotent(String operation,
-                                                   String key,
-                                                   Object requestBody,
-                                                   java.util.function.Supplier<ResponseEntity<Void>> action) {
-        if (key == null || key.isBlank()) {
-            return action.get();
-        }
 
-        Optional<IdempotencyRecord> existing = idempotencyService.find(key, operation);
-        if (existing.isPresent()) {
-            idempotencyService.assertSameRequest(existing.get(), requestBody);
-            return ResponseEntity.status(existing.get().getResponseStatus()).build();
-        }
-
-        ResponseEntity<Void> response = action.get();
-        idempotencyService.save(key, operation, requestBody, response.getStatusCode().value(), null);
-        return response;
-    }
 }
