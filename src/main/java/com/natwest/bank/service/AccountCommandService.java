@@ -2,6 +2,8 @@ package com.natwest.bank.service;
 
 import com.natwest.bank.domain.Account;
 import com.natwest.bank.domain.Money;
+import com.natwest.bank.exception.AccountAlreadyExistsException;
+import com.natwest.bank.exception.InvalidAccountIdException;
 import com.natwest.bank.repository.AccountRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,9 +26,14 @@ public class AccountCommandService {
 
     @Transactional
     public Account openAccount(String accountId, Money initialBalance) {
-        if (accountRepository.existsById(accountId)) {
-            throw new IllegalArgumentException("Account already exists: " + accountId);
+
+        if (accountId == null || accountId.isBlank()) {
+            throw new InvalidAccountIdException("Account id is required");
         }
+        if (accountRepository.existsById(accountId)) {
+            throw new AccountAlreadyExistsException(accountId);
+        }
+
         Account account = new Account(accountId, initialBalance);
         Account saved = accountRepository.save(account);
         log.info("Opened account {} with balance {}", accountId, initialBalance);

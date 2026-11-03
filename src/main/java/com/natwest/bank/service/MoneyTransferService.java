@@ -5,6 +5,7 @@ import com.natwest.bank.domain.Money;
 import com.natwest.bank.event.MoneyDepositedEvent;
 import com.natwest.bank.event.MoneyWithdrawnEvent;
 import com.natwest.bank.exception.AccountNotFoundException;
+import com.natwest.bank.exception.SameAccountTransferException;
 import com.natwest.bank.port.DomainEventPort;
 import com.natwest.bank.repository.AccountRepository;
 import com.natwest.bank.support.OptimisticLockRetry;
@@ -68,9 +69,11 @@ public class MoneyTransferService {
     @CircuitBreaker(name = "bankOperations")
     @RateLimiter(name = "bankOperations")
     public void transfer(String fromAccountId, String toAccountId, Money amount) {
+
         if (fromAccountId.equals(toAccountId)) {
-            throw new IllegalArgumentException("Cannot transfer to the same account");
+            throw new SameAccountTransferException(fromAccountId);
         }
+        
         optimisticLockRetry.execute(TRANSFER_MAX_RETRIES,
                 () -> transferWorker.execute(fromAccountId, toAccountId, amount));
     }

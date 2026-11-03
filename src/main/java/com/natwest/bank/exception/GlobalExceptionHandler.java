@@ -15,44 +15,39 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccountNotFoundException.class)
     public ProblemDetail handleNotFound(AccountNotFoundException ex) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
-        problem.setTitle("Account Not Found");
-        problem.setProperty("timestamp", Instant.now());
-        return problem;
+        return problem(HttpStatus.NOT_FOUND, "Account Not Found", ex.getMessage());
+    }
+
+    @ExceptionHandler(AccountAlreadyExistsException.class)
+    public ProblemDetail handleAlreadyExists(AccountAlreadyExistsException ex) {
+        return problem(HttpStatus.CONFLICT, "Account Already Exists", ex.getMessage());
     }
 
     @ExceptionHandler(InsufficientFundsException.class)
     public ProblemDetail handleInsufficientFunds(InsufficientFundsException ex) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage());
-        problem.setTitle("Insufficient Funds");
-        problem.setProperty("timestamp", Instant.now());
-        return problem;
+        return problem(HttpStatus.UNPROCESSABLE_ENTITY, "Insufficient Funds", ex.getMessage());
     }
 
-    @ExceptionHandler({InvalidAmountException.class, IllegalArgumentException.class, NumberFormatException.class})
+    @ExceptionHandler({
+            InvalidAmountException.class,
+            InvalidAccountIdException.class,
+            SameAccountTransferException.class
+    })
     public ProblemDetail handleBadRequest(RuntimeException ex) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
-        problem.setTitle("Invalid Request");
-        problem.setProperty("timestamp", Instant.now());
-        return problem;
+        return problem(HttpStatus.BAD_REQUEST, "Invalid Request", ex.getMessage());
+    }
+
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ProblemDetail handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
+        return problem(HttpStatus.CONFLICT, "Concurrent Update",
+                "Account was modified concurrently. Please retry.");
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail handleDataIntegrity(DataIntegrityViolationException ex) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
-                "Request violates data constraints (e.g. amount too large for DECIMAL(19,2) or duplicate key).");
-        problem.setTitle("Invalid Request");
-        problem.setProperty("timestamp", Instant.now());
-        return problem;
-    }
-
-    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
-    public ProblemDetail handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
-                "Concurrent modification detected. Please retry.");
-        problem.setTitle("Conflict");
-        problem.setProperty("timestamp", Instant.now());
-        return problem;
+        return problem(HttpStatus.BAD_REQUEST, "Invalid Request",
+                "Request violates data constraints (e.g. amount too large or duplicate key).");
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -61,10 +56,18 @@ public class GlobalExceptionHandler {
                 .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
                 .reduce((a, b) -> a + "; " + b)
                 .orElse("Validation failed");
+        return problem(HttpStatus.BAD_REQUEST, "Validation Error", detail);
+    }
 
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detail);
-        problem.setTitle("Validation Error");
-        problem.setProperty("timestamp", Instant.now());
-        return problem;
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
+        return problem(HttpStatus.BAD_REQUEST, "Invalid Request", ex.getMessage());
+    }
+
+    private static ProblemDetail problem(HttpStatus status, String title, String detail) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, detail);
+        pd.setTitle(title);
+        pd.setProperty("timestamp", Instant.now());
+        return pd;
     }
 }
