@@ -2,9 +2,11 @@ package com.natwest.bank.service;
 
 import com.natwest.bank.domain.Money;
 import com.natwest.bank.domain.TransactionType;
+import com.natwest.bank.exception.AccountAlreadyExistsException;
 import com.natwest.bank.exception.AccountNotFoundException;
 import com.natwest.bank.exception.InsufficientFundsException;
 import com.natwest.bank.exception.InvalidAmountException;
+import com.natwest.bank.exception.SameAccountTransferException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -42,7 +44,8 @@ class BankServiceTest {
         @Test
         void rejectsDuplicateAccount() {
             bank.openAccount("A1", Money.ZERO);
-            assertThrows(IllegalArgumentException.class, () -> bank.openAccount("A1", Money.ZERO));
+            assertThrows(AccountAlreadyExistsException.class,
+                    () -> bank.openAccount("A1", Money.ZERO));
         }
 
         @Test
@@ -122,7 +125,7 @@ class BankServiceTest {
         @Test
         void rejectsSameAccountTransfer() {
             bank.openAccount("A1", Money.of("100.00"));
-            assertThrows(IllegalArgumentException.class,
+            assertThrows(SameAccountTransferException.class,
                     () -> bank.transfer("A1", "A1", Money.of("5")));
         }
     }

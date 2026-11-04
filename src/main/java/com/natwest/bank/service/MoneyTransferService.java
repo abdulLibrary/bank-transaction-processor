@@ -69,11 +69,10 @@ public class MoneyTransferService {
     @CircuitBreaker(name = "bankOperations")
     @RateLimiter(name = "bankOperations")
     public void transfer(String fromAccountId, String toAccountId, Money amount) {
-
         if (fromAccountId.equals(toAccountId)) {
             throw new SameAccountTransferException(fromAccountId);
         }
-        
+
         optimisticLockRetry.execute(TRANSFER_MAX_RETRIES,
                 () -> transferWorker.execute(fromAccountId, toAccountId, amount));
     }

@@ -1,6 +1,7 @@
 package com.natwest.bank.idempotency;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,13 +26,52 @@ public class IdempotencyService {
     }
 
     @Transactional
+    public Optional<IdempotencyRecord> tryClaim(String key, String operation, Object requestBody) {
+        String requestHash = hash(requestBody);
+        IdempotencyRecord claim = new IdempotencyRecord(key, operation, requestHash);
+        try {
+            repository.saveAndFlush(claim);
+            return Optional.of(claim);
+        } catch (DataIntegrityViolationException ex) {
+            return Optional.empty();
+        } catch (RuntimeException ex) {
+            if (isConstraintViolation(ex)) {
+                return Optional.empty();
+            }
+            throw ex;
+        }
+    }
+
+    @Transactional
+    public void markCompleted(IdempotencyRecord record, int responseStatus, Object responseBody) {
+        record.markCompleted(responseStatus, serialize(responseBody));
+        repository.save(record);
+    }
+
+    @Transactional
+    public void markFailed(IdempotencyRecord record) {
+        record.markFailed();
+        repository.save(record);
+    }
+
+    @Transactional
+    public void removeFailed(IdempotencyRecord record) {
+        if (record.getStatus() == IdempotencyRecord.Status.FAILED) {
+            repository.delete(record);
+        }
+    }
+
+    @Transactional
     public void save(String key, String operation, Object requestBody,
                      int responseStatus, Object responseBody) {
         String requestHash = hash(requestBody);
-        String responseJson = serialize(responseBody);
-        IdempotencyRecord record = new IdempotencyRecord(
-                key, operation, requestHash, responseStatus, responseJson);
-        repository.save(record);
+        IdempotencyRecord record = new IdempotencyRecord(key, operation, requestHash);
+        record.markCompleted(responseStatus, serialize(responseBody));
+        try {
+            repository.save(record);
+        } catch (DataIntegrityViolationException ignored) {
+            // concurrent writer already persisted
+        }
     }
 
     public void assertSameRequest(IdempotencyRecord existing, Object currentRequest) {
@@ -40,6 +80,21 @@ public class IdempotencyService {
             throw new IllegalArgumentException(
                     "Idempotency-Key reused with a different request payload");
         }
+    }
+
+    private static boolean isConstraintViolation(Throwable ex) {
+        while (ex != null) {
+            if (ex instanceof DataIntegrityViolationException) {
+                return true;
+            }
+            String msg = ex.getMessage();
+            if (msg != null && (msg.contains("unique") || msg.contains("duplicate")
+                    || msg.contains("Unique index") || msg.contains("CONSTRAINT"))) {
+                return true;
+            }
+            ex = ex.getCause();
+        }
+        return false;
     }
 
     private String hash(Object body) {
